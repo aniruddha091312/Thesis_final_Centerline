@@ -75,7 +75,9 @@ def evaluate_model(model, loader, device, criterion):
 
 
 def main(args):
+
     dataset_path = '2023_RCSE_Centerline'
+
     file_names = os.listdir(dataset_path)
 
     train_dataset = Pointnet2dataset(dataset_path, file_names, num_points=args.num_points, augment=True, split='train')
