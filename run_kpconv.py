@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from KPconv.models.architecture import KPFCNN
 from KPconv.utils.config import Config
-from data_utils.MeshCenterline import Pointnet2dataset
+from data_utils.KPconv_dataset import Pointnet2dataset, CustomBatch
 
 
 def parse_args():
@@ -26,47 +26,29 @@ def parse_args():
 
 
 def evaluate_model(model, loader, device, criterion):
-    """
-    Evaluate the model using the provided data loader.
-
-    Args:
-        model (nn.Module): The model to evaluate.
-        loader (DataLoader): The DataLoader providing data and labels.
-        device (torch.device): The device to which tensors should be moved.
-        criterion (nn.Module): The loss function (e.g., nn.NLLLoss()).
-
-    Returns:
-        avg_loss (float): The average loss across the dataset.
-        precision (float): The precision of the predictions.
-        recall (float): The recall of the predictions.
-        accuracy (float): The accuracy of the predictions.
-    """
     model.eval()
     losses = []
     all_labels = []
     all_preds = []
 
     with torch.no_grad():
-        for data, labels in loader:
-            data, labels = data.to(device), labels.to(device)
-            outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
-            loss = criterion(outputs, labels)
+        for batch in loader:
+            batch = CustomBatch(batch).to(device)  # Wrap the batch in CustomBatch and move to device
 
+            outputs = model(batch)  # Pass the CustomBatch instance to the model
+
+            # Reshape outputs and labels for evaluation
+            outputs = outputs.view(-1, outputs.size(-1))  # Flatten outputs to [batch_size * num_points, num_classes]
+            labels = batch.labels.view(-1)  # Flatten labels to [batch_size * num_points]
+
+            loss = criterion(outputs, labels)
             losses.append(loss.item())
 
-            # Get predictions and extend lists for metrics calculation
-            preds = outputs.argmax(dim=2).detach().cpu().numpy()
+            preds = outputs.argmax(dim=1).detach().cpu().numpy()
             all_preds.extend(preds)
             all_labels.extend(labels.detach().cpu().numpy())
 
-    # Calculate average loss
     avg_loss = sum(losses) / len(losses)
-
-    # Flatten lists for metrics calculations
-    all_labels = [label for sublist in all_labels for label in sublist]
-    all_preds = [pred for sublist in all_preds for pred in sublist]
-
-    # Calculate precision, recall, and accuracy
     precision = precision_score(all_labels, all_preds, average='micro')
     recall = recall_score(all_labels, all_preds, average='micro')
     accuracy = accuracy_score(all_labels, all_preds)
@@ -75,9 +57,7 @@ def evaluate_model(model, loader, device, criterion):
 
 
 def main(args):
-
     dataset_path = '2023_RCSE_Centerline'
-
     file_names = os.listdir(dataset_path)
 
     train_dataset = Pointnet2dataset(dataset_path, file_names, num_points=args.num_points, augment=True, split='train')
@@ -89,39 +69,35 @@ def main(args):
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     device = torch.device('cuda' if torch.cuda.is_available() and not args.use_cpu else 'cpu')
-    # Load KPConv model
+
     config = Config()
     config.num_classes = 2  # Assuming a binary segmentation task
     lbl_values = [0, 1]
     ign_lbls = []
-    # Define the label values and ignored labels
-    # lbl_values = [0, 1]  # 0: non-centerline, 1: centerline
-    # ign_lbls = []  # No labels to ignore, if there are any labels to ignore, add them here
+
     model = KPFCNN(config, lbl_values, ign_lbls).to(device)
     print("KPConv model successfully initialized")
     print(model)
 
-    criterion = torch.nn.CrossEntropyLoss().to(device)  # Use a segmentation-appropriate loss
+    criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.decay_rate)
 
     # Training loop
-    for i, epoch in enumerate(range(args.epoch)):
+    for epoch in range(args.epoch):
         model.train()
-        for j, (data, labels) in enumerate(train_loader):
-            data, labels = data.to(device), labels.to(device)
+        for batch in train_loader:
+            batch = CustomBatch(batch).to(device)  # Wrap the batch in CustomBatch and move to device
             optimizer.zero_grad()
-            # outputs, _ = model(data)
-            outputs, _ = model(data)
-            print("OUTPUTS SHAPE", outputs.shape)
-            print("LABELS SHAPE", labels.shape)
+
+            outputs = model(batch)  # Model output should be [batch_size, num_points, num_classes]
+
+            # Reshape outputs and labels for loss calculation
+            outputs = outputs.view(-1, outputs.size(-1))  # Flatten outputs to [batch_size * num_points, num_classes]
+            labels = batch.labels.view(-1)  # Flatten labels to [batch_size * num_points]
+
             loss = criterion(outputs, labels)
-            print(loss)
             loss.backward()
             optimizer.step()
-            if j == 2:
-                break
-        if i == 2:
-            break
 
         train_loss, train_prec, train_recall, train_acc = evaluate_model(model, train_loader, device, criterion)
         val_loss, val_prec, val_recall, val_acc = evaluate_model(model, val_loader, device, criterion)
@@ -130,7 +106,6 @@ def main(args):
         print(
             f'Validation Loss: {val_loss:.4f}, Precision: {val_prec:.4f}, Recall: {val_recall:.4f}, Accuracy: {val_acc:.4f}')
 
-    # Testing evaluation
     test_loss, test_prec, test_recall, test_acc = evaluate_model(model, test_loader, device, criterion)
     print(
         f'Test Loss: {test_loss:.4f}, Precision: {test_prec:.4f}, Recall: {test_recall:.4f}, Accuracy: {test_acc:.4f}')
