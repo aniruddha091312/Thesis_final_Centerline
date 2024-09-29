@@ -151,20 +151,63 @@ class Pointnet2dataset(Dataset):
     def __len__(self):
         return len(self.point_clouds)
 
+    # def __getitem__(self, idx):
+    #     point_cloud = self.point_clouds[idx]
+    #     labels = self.labels[idx]
+    #
+    #     point_cloud = self.apply_augmentations(point_cloud)
+    #     point_cloud = pc_normalize(point_cloud)
+    #
+    #     point_cloud_tensor = torch.tensor(point_cloud, dtype=torch.float32)  # Shape: (num_points, 3)
+    #     labels_tensor = torch.tensor(labels, dtype=torch.long)  # Shape: (num_points,)
+    #
+    #     # Debugging: Print the shapes to ensure correctness
+    #     print(f"Point Cloud Shape: {point_cloud_tensor.shape}")
+    #     print(f"Labels Shape: {labels_tensor.shape}")
+    #
+    #     transposed_point_cloud_tensor = point_cloud_tensor.transpose(0, 1)
+    #     print(f"Transposed Point Cloud Shape: {transposed_point_cloud_tensor.shape}")
+    #     return transposed_point_cloud_tensor, labels_tensor
+
     def __getitem__(self, idx):
         point_cloud = self.point_clouds[idx]
         labels = self.labels[idx]
 
-        point_cloud = self.apply_augmentations(point_cloud)
-        point_cloud = pc_normalize(point_cloud)
+        if self.split == 'train':
+            # Option 1: Return the original point cloud first
+            point_cloud_original = pc_normalize(point_cloud)
+            point_cloud_tensor_original = torch.tensor(point_cloud_original, dtype=torch.float32)
+            labels_tensor = torch.tensor(labels, dtype=torch.long)
 
-        point_cloud_tensor = torch.tensor(point_cloud, dtype=torch.float32)  # Shape: (num_points, 3)
-        labels_tensor = torch.tensor(labels, dtype=torch.long)  # Shape: (num_points,)
+            # Option 2: Return the augmented point cloud
+            point_cloud_augmented = self.apply_augmentations(point_cloud)
+            point_cloud_augmented = pc_normalize(point_cloud_augmented)
+            point_cloud_tensor_augmented = torch.tensor(point_cloud_augmented, dtype=torch.float32)
 
-        # Debugging: Print the shapes to ensure correctness
-        print(f"Point Cloud Shape: {point_cloud_tensor.shape}")
-        print(f"Labels Shape: {labels_tensor.shape}")
+            # Concatenate the original and augmented data
+            combined_point_cloud = torch.cat((point_cloud_tensor_original, point_cloud_tensor_augmented), dim=0)
+            combined_labels = torch.cat((labels_tensor, labels_tensor), dim=0)
 
-        transposed_point_cloud_tensor = point_cloud_tensor.transpose(0, 1)
-        print(f"Transposed Point Cloud Shape: {transposed_point_cloud_tensor.shape}")
-        return transposed_point_cloud_tensor, labels_tensor
+            # Debugging: Print shapes of the concatenated point cloud and labels
+            print(f"Combined Point Cloud Shape: {combined_point_cloud.shape}")
+            print(f"Combined Labels Shape: {combined_labels.shape}")
+
+            # Return the concatenated data with transposed point cloud
+            transposed_combined_point_cloud = combined_point_cloud.transpose(0, 1)
+
+            # Debugging: Print shape after transposition
+            print(f"Transposed Combined Point Cloud Shape: {transposed_combined_point_cloud.shape}")
+
+            return transposed_combined_point_cloud, combined_labels
+
+        else:
+            # For validation and testing, only use the original data
+            point_cloud = pc_normalize(point_cloud)
+            point_cloud_tensor = torch.tensor(point_cloud, dtype=torch.float32)
+            labels_tensor = torch.tensor(labels, dtype=torch.long)
+
+            # Debugging: Print shapes for validation and testing
+            print(f"Validation/Test Point Cloud Shape: {point_cloud_tensor.shape}")
+            print(f"Validation/Test Labels Shape: {labels_tensor.shape}")
+
+            return point_cloud_tensor.transpose(0, 1), labels_tensor
