@@ -151,24 +151,6 @@ class Pointnet2dataset(Dataset):
     def __len__(self):
         return len(self.point_clouds)
 
-    # def __getitem__(self, idx):
-    #     point_cloud = self.point_clouds[idx]
-    #     labels = self.labels[idx]
-    #
-    #     point_cloud = self.apply_augmentations(point_cloud)
-    #     point_cloud = pc_normalize(point_cloud)
-    #
-    #     point_cloud_tensor = torch.tensor(point_cloud, dtype=torch.float32)  # Shape: (num_points, 3)
-    #     labels_tensor = torch.tensor(labels, dtype=torch.long)  # Shape: (num_points,)
-    #
-    #     # Debugging: Print the shapes to ensure correctness
-    #     print(f"Point Cloud Shape: {point_cloud_tensor.shape}")
-    #     print(f"Labels Shape: {labels_tensor.shape}")
-    #
-    #     transposed_point_cloud_tensor = point_cloud_tensor.transpose(0, 1)
-    #     print(f"Transposed Point Cloud Shape: {transposed_point_cloud_tensor.shape}")
-    #     return transposed_point_cloud_tensor, labels_tensor
-
     def __getitem__(self, idx):
         point_cloud = self.point_clouds[idx]
         labels = self.labels[idx]
