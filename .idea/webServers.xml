@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="1426aa47-08d8-48ee-a7da-3d421ae5c3cb" name="DL Server Workspace">
+        <fileTransfer rootFolder="//workspace/Storage_fast" accessType="SFTP" host="141.44.18.89" port="50210" sshConfigId="a328c8e7-313d-458f-a603-cdcb14d5ed42" sshConfig="DL Server Workspace">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

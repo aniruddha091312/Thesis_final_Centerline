@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" connectionConfig="{&quot;serverAliveInterval&quot;:300}" host="141.44.18.89" id="a328c8e7-313d-458f-a603-cdcb14d5ed42" port="50210" customName="DL Server Workspace" nameFormat="CUSTOM" username="root" useOpenSSHConfig="true">
+        <option name="customName" value="DL Server Workspace" />
+      </sshConfig>
+    </configs>
+  </component>
+</project>
