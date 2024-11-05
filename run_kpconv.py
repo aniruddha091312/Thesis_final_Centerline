@@ -24,6 +24,55 @@ def parse_args():
     parser.add_argument('--use_normals', action='store_true', default=False, help='use normals')
     return parser.parse_args()
 
+#
+# def evaluate_model(model, loader, device, criterion):
+#     """
+#     Evaluate the model using the provided data loader.
+#
+#     Args:
+#         model (nn.Module): The model to evaluate.
+#         loader (DataLoader): The DataLoader providing data and labels.
+#         device (torch.device): The device to which tensors should be moved.
+#         criterion (nn.Module): The loss function (e.g., nn.NLLLoss()).
+#
+#     Returns:
+#         avg_loss (float): The average loss across the dataset.
+#         precision (float): The precision of the predictions.
+#         recall (float): The recall of the predictions.
+#         accuracy (float): The accuracy of the predictions.
+#     """
+#     model.eval()
+#     losses = []
+#     all_labels = []
+#     all_preds = []
+#
+#     with torch.no_grad():
+#         for data, labels in loader:
+#             data, labels = data.to(device), labels.to(device)
+#             outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
+#             loss = criterion(outputs, labels)
+#
+#             losses.append(loss.item())
+#
+#             # Get predictions and extend lists for metrics calculation
+#             preds = outputs.argmax(dim=2).detach().cpu().numpy()
+#             all_preds.extend(preds)
+#             all_labels.extend(labels.detach().cpu().numpy())
+#
+#     # Calculate average loss
+#     avg_loss = sum(losses) / len(losses)
+#
+#     # Flatten lists for metrics calculations
+#     all_labels = [label for sublist in all_labels for label in sublist]
+#     all_preds = [pred for sublist in all_preds for pred in sublist]
+#
+#     # Calculate precision, recall, and accuracy
+#     precision = precision_score(all_labels, all_preds, average='macro')
+#     recall = recall_score(all_labels, all_preds, average='macro')
+#     accuracy = accuracy_score(all_labels, all_preds)
+#
+#     return avg_loss, precision, recall, accuracy
+
 
 def evaluate_model(model, loader, device, criterion):
     model.eval()

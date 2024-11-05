@@ -10,9 +10,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
-
 warnings.filterwarnings("ignore")
-
 
 dataset_path = '2023_RCSE_Centerline'
 
@@ -27,16 +25,11 @@ def get_point_cloud(file_path, num_points=1024):
 def load_centerline(file_path):
     return np.loadtxt(file_path, skiprows=1, usecols=(0, 1, 2))
 
-
-def random_rotation(pc, max_angle=np.pi / 4):
-    angle = np.random.uniform(-max_angle, max_angle)
-    rotation_matrix = np.array([
-        [np.cos(angle), -np.sin(angle), 0],
-        [np.sin(angle), np.cos(angle), 0],
-        [0, 0, 1]
-    ])
-    return np.dot(pc, rotation_matrix)
-
+def check_point_cloud_uniformity(point_cloud):
+    # Calculate distance matrix
+    dists = distance_matrix(point_cloud, point_cloud)
+    avg_dist = np.mean(dists)
+    return avg_dist
 
 def random_scale(pc, scale_low=0.8, scale_high=1.2):
     scale = np.random.uniform(scale_low, scale_high)
@@ -62,22 +55,28 @@ def pc_normalize(pc):
     return pc
 
 
-def classify_point(point_cloud, centerline_points):
+def classify_point(point_cloud, centerline_points, threshold=0.05):
+    """
+#     Classify points in the point cloud based on proximity to centerline points.
+#
+#     Args:
+#     - point_cloud: Numpy array of points (Nx3) representing the point cloud.
+#     - centerline_points: Numpy array of points (Mx3) representing the centerline.
+#     - threshold: The maximum distance to consider a point "close" to the centerline.
+#
+#     Returns:
+#     - classifications: Numpy array of size N, where each element is 0 or 1 depending on proximity to centerline.
+#     """
     tree = cKDTree(point_cloud)
     classifications = np.zeros(len(point_cloud))
     for point in centerline_points:
-        _, idx = tree.query(point)
-        classifications[idx] = 1
+        distance, idx = tree.query(point)
+
+        # Check if the nearest point is within the specified threshold distance
+        if distance <= threshold:
+            classifications[idx] = 1
+
     return classifications
-
-
-def check_point_cloud_uniformity(point_cloud):
-    # Calculate distance matrix
-    dists = distance_matrix(point_cloud, point_cloud)
-    avg_dist = np.mean(dists)
-    # print(f"Average Distance Between Points: {avg_dist:.4f}")
-    return avg_dist
-
 
 def remove_duplicate_points(centerline, eps=0.05, min_samples=2):
     """
@@ -133,10 +132,12 @@ class Pointnet2dataset(Dataset):
                 continue  # Skip this file and continue with the next one
 
             point_cloud = get_point_cloud(obj_file_path, self.num_points)
+            point_cloud = pc_normalize(point_cloud)
 
             centerline_file_path = obj_file_path.replace('.obj', '_centerline.dat')
             centerline_points = load_centerline(centerline_file_path)
             centerline_points = remove_duplicate_points(centerline_points)
+            centerline_points = pc_normalize(centerline_points)
 
             labels = classify_point(point_cloud, centerline_points)
 
@@ -145,7 +146,6 @@ class Pointnet2dataset(Dataset):
 
     def apply_augmentations(self, point_cloud):
         if self.augment and self.split == 'train':
-            point_cloud = random_rotation(point_cloud)
             point_cloud = random_scale(point_cloud)
             point_cloud = random_jitter(point_cloud)
         return point_cloud
