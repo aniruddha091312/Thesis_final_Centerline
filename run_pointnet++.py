@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
     parser.add_argument('--model', default='pointnet2_cls_ssg', help='model name [default: pointnet2_cls_ssg]')
-    parser.add_argument('--epoch', type=int, default=10, help='number of epochs in training')
+    parser.add_argument('--epoch', type=int, default=100, help='number of epochs in training')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate in training')
     parser.add_argument('--num_points', type=int, default=1024, help='number of points in point cloud')
     parser.add_argument('--optimizer', default='Adam', help='optimizer for training')
@@ -106,10 +106,6 @@ def main(args):
             print(loss)
             loss.backward()
             optimizer.step()
-            if j == 2:
-                break
-        if i == 2:
-            break
 
         train_loss, train_prec, train_recall, train_acc = evaluate_model(model, train_loader, device, criterion)
         val_loss, val_prec, val_recall, val_acc = evaluate_model(model, val_loader, device, criterion)

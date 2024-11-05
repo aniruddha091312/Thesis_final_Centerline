@@ -57,17 +57,8 @@ def pc_normalize(pc):
     return pc
 
 
-def classify_point(point_cloud, centerline_points):
-    tree = cKDTree(point_cloud)
-    classifications = np.zeros(len(point_cloud))
-    for point in centerline_points:
-        _, idx = tree.query(point)
-        classifications[idx] = 1
-    return classifications
-
-
-# def classify_point(point_cloud, centerline_points, threshold=0.01):
-#     """
+def classify_point(point_cloud, centerline_points, threshold=0.05):
+    """
 #     Classify points in the point cloud based on proximity to centerline points.
 #
 #     Args:
@@ -78,17 +69,16 @@ def classify_point(point_cloud, centerline_points):
 #     Returns:
 #     - classifications: Numpy array of size N, where each element is 0 or 1 depending on proximity to centerline.
 #     """
-#     tree = cKDTree(point_cloud)
-#     classifications = np.zeros(len(point_cloud))
-#
-#     for point in centerline_points:
-#         distance, idx = tree.query(point)
-#
-#         # Check if the nearest point is within the specified threshold distance
-#         if distance <= threshold:
-#             classifications[idx] = 1
-#
-#     return classifications
+    tree = cKDTree(point_cloud)
+    classifications = np.zeros(len(point_cloud))
+    for point in centerline_points:
+        distance, idx = tree.query(point)
+
+        # Check if the nearest point is within the specified threshold distance
+        if distance <= threshold:
+            classifications[idx] = 1
+
+    return classifications
 
 
 def remove_duplicate_points(centerline, eps=0.05, min_samples=2):
@@ -108,26 +98,6 @@ def remove_duplicate_points(centerline, eps=0.05, min_samples=2):
             cluster_center = np.mean(cluster_points, axis=0)
             unique_points.append(cluster_center)
     return np.array(unique_points)
-
-
-# def remove_duplicate_centerline_points(centerline_points, eps=0.01):
-#    """
-#    Removes or merges "double" points in the centerline using DBSCAN clustering.
-#    :param centerline_points: Nx3 array of centerline points.
-#    :param eps: The distance threshold for clustering.
-#    :return: Cleaned centerline points.
-#    """
-#    # Apply DBSCAN to group points that are too close to each other
-#    clustering = DBSCAN(eps=eps, min_samples=1).fit(centerline_points)
-
-#    # For each cluster, take the mean of the points as the representative
-#    unique_points = []
-#    for cluster_id in np.unique(clustering.labels_):
-#        cluster_points = centerline_points[clustering.labels_ == cluster_id]
-#        # Take the mean of the cluster to merge points
-#        unique_points.append(np.mean(cluster_points, axis=0))
-
-#    return np.array(unique_points)
 
 
 class Pointnet2dataset(Dataset):
@@ -165,10 +135,12 @@ class Pointnet2dataset(Dataset):
                 continue  # Skip this file and continue with the next one
 
             point_cloud = get_point_cloud(obj_file_path, self.num_points)
+            point_cloud = pc_normalize(point_cloud)
 
             centerline_file_path = obj_file_path.replace('.obj', '_centerline.dat')
             centerline_points = load_centerline(centerline_file_path)
             centerline_points = remove_duplicate_points(centerline_points)
+            centerline_points = pc_normalize(centerline_points)
 
             labels = classify_point(point_cloud, centerline_points)
 
@@ -189,12 +161,12 @@ class Pointnet2dataset(Dataset):
         labels = self.labels[idx]
 
         if self.split == 'train':
-            # Option 1: Return the original point cloud first
+            # Normalize the original point cloud
             point_cloud_original = pc_normalize(point_cloud)
             point_cloud_tensor_original = torch.tensor(point_cloud_original, dtype=torch.float32)
             labels_tensor = torch.tensor(labels, dtype=torch.long)
 
-            # Option 2: Return the augmented point cloud
+            # Return the augmented point cloud
             point_cloud_augmented = self.apply_augmentations(point_cloud)
             point_cloud_augmented = pc_normalize(point_cloud_augmented)
             point_cloud_tensor_augmented = torch.tensor(point_cloud_augmented, dtype=torch.float32)

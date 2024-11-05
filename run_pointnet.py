@@ -2,6 +2,7 @@ import argparse
 import os
 
 import torch
+from matplotlib import pyplot as plt
 from sklearn.metrics import precision_score, recall_score, accuracy_score
 from torch.utils.data import DataLoader
 
@@ -15,7 +16,7 @@ def parse_args():
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
     parser.add_argument('--model', default='pointnet2_cls_ssg', help='model name [default: pointnet2_cls_ssg]')
-    parser.add_argument('--epoch', type=int, default=10, help='number of epochs in training')
+    parser.add_argument('--epoch', type=int, default=100, help='number of epochs in training')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate in training')
     parser.add_argument('--num_points', type=int, default=1024, help='number of points in point cloud')
     parser.add_argument('--optimizer', default='Adam', help='optimizer for training')
@@ -25,54 +26,79 @@ def parse_args():
     return parser.parse_args()
 
 
-def evaluate_model(model, loader, device, criterion):
+def visualize_predictions(point_clouds, true_labels, predicted_labels):
     """
-    Evaluate the model using the provided data loader.
+
+    Visualize the point clouds with true labels and predicted labels.
+
 
     Args:
-        model (nn.Module): The model to evaluate.
-        loader (DataLoader): The DataLoader providing data and labels.
-        device (torch.device): The device to which tensors should be moved.
-        criterion (nn.Module): The loss function (e.g., nn.NLLLoss()).
 
-    Returns:
-        avg_loss (float): The average loss across the dataset.
-        precision (float): The precision of the predictions.
-        recall (float): The recall of the predictions.
-        accuracy (float): The accuracy of the predictions.
+        point_clouds (list): List of point clouds.
+
+        true_labels (list): List of true labels.
+
+        predicted_labels (list): List of predicted labels.
+
     """
+
+    for i in range(len(point_clouds)):
+        pc = point_clouds[i]
+
+        true = true_labels[i]
+
+        pred = predicted_labels[i]
+
+        # Create a scatter plot
+
+        fig = plt.figure(figsize=(8, 8))
+
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Scatter plot for true labels
+
+        ax.scatter(pc[:, 0], pc[:, 1], pc[:, 2], c=true, marker='o', alpha=0.5, label='True Labels', s=10)
+
+        # Scatter plot for predicted labels
+
+        ax.scatter(pc[:, 0], pc[:, 1], pc[:, 2], c=pred, marker='x', alpha=0.5, label='Predicted Labels', s=20)
+
+        ax.set_title(f'Point Cloud Visualization (Sample {i})')
+
+        ax.legend()
+
+        plt.show()
+
+
+def evaluate_model(model, loader, device, criterion, visualize=False):
     model.eval()
     losses = []
     all_labels = []
     all_preds = []
-
+    point_clouds = []  # To store point clouds for visualization
     with torch.no_grad():
         for data, labels in loader:
             data, labels = data.to(device), labels.to(device)
             outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
             loss = criterion(outputs, labels)
-
             losses.append(loss.item())
-
-            # Get predictions and extend lists for metrics calculation
             preds = outputs.argmax(dim=2).detach().cpu().numpy()
             all_preds.extend(preds)
             all_labels.extend(labels.detach().cpu().numpy())
-
+            point_clouds.extend(data.cpu().numpy())  # Store point clouds for visualization
     # Calculate average loss
     avg_loss = sum(losses) / len(losses)
-
     # Flatten lists for metrics calculations
     all_labels = [label for sublist in all_labels for label in sublist]
     all_preds = [pred for sublist in all_preds for pred in sublist]
-
     # Calculate precision, recall, and accuracy
     precision = precision_score(all_labels, all_preds, average='macro')
     recall = recall_score(all_labels, all_preds, average='macro')
     accuracy = accuracy_score(all_labels, all_preds)
+    if visualize:
+        visualize_predictions(point_clouds, all_labels, all_preds)
 
     return avg_loss, precision, recall, accuracy
-
 
 def main(args):
     dataset_path = '2023_RCSE_Centerline'
@@ -99,17 +125,13 @@ def main(args):
         for j, (data, labels) in enumerate(train_loader):
             data, labels = data.to(device), labels.to(device)
             optimizer.zero_grad()
-            outputs,_= model(data)
+            outputs, _ = model(data)
             print("OUTPUTS SHAPE", outputs.shape)
             print("LABELS SHAPE", labels.shape)
-            loss = criterion(outputs,labels)
+            loss = criterion(outputs, labels)
             print(loss)
             loss.backward()
             optimizer.step()
-            if j == 2:
-                break
-        if i == 2:
-            break
 
         train_loss, train_prec, train_recall, train_acc = evaluate_model(model, train_loader, device, criterion)
         val_loss, val_prec, val_recall, val_acc = evaluate_model(model, val_loader, device, criterion)
