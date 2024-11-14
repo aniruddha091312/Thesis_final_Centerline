@@ -1,6 +1,9 @@
 import argparse
 import os
+import pickle
 
+import numpy as np
+import pyvista as pv
 import torch
 from sklearn.metrics import precision_score, recall_score, accuracy_score
 from torch.utils.data import DataLoader
@@ -25,6 +28,54 @@ def parse_args():
     return parser.parse_args()
 
 
+#
+# def evaluate_model(model, loader, device, criterion):
+#     """
+#     Evaluate the model using the provided data loader.
+#
+#     Args:
+#         model (nn.Module): The model to evaluate.
+#         loader (DataLoader): The DataLoader providing data and labels.
+#         device (torch.device): The device to which tensors should be moved.
+#         criterion (nn.Module): The loss function (e.g., nn.NLLLoss()).
+#
+#     Returns:
+#         avg_loss (float): The average loss across the dataset.
+#         precision (float): The precision of the predictions.
+#         recall (float): The recall of the predictions.
+#         accuracy (float): The accuracy of the predictions.
+#     """
+#     model.eval()
+#     losses = []
+#     all_labels = []
+#     all_preds = []
+#
+#     with torch.no_grad():
+#         for data, labels in loader:
+#             data, labels = data.to(device), labels.to(device)
+#             outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
+#             loss = criterion(outputs, labels)
+#
+#             losses.append(loss.item())
+#             # Get predictions and extend lists for metrics calculation
+#             preds = outputs.argmax(dim=2).detach().cpu().numpy()
+#             all_preds.extend(preds)
+#             all_labels.extend(labels.detach().cpu().numpy())
+#
+#     # Calculate average loss
+#     avg_loss = sum(losses) / len(losses)
+#
+#     # Flatten lists for metrics calculations
+#     all_labels = [label for sublist in all_labels for label in sublist]
+#     all_preds = [pred for sublist in all_preds for pred in sublist]
+#
+#     # Calculate precision, recall, and accuracy
+#     precision = precision_score(all_labels, all_preds, average='macro')
+#     recall = recall_score(all_labels, all_preds, average='macro')
+#     accuracy = accuracy_score(all_labels, all_preds)
+#
+#     return avg_loss, precision, recall, accuracy
+
 def evaluate_model(model, loader, device, criterion):
     """
     Evaluate the model using the provided data loader.
@@ -40,6 +91,8 @@ def evaluate_model(model, loader, device, criterion):
         precision (float): The precision of the predictions.
         recall (float): The recall of the predictions.
         accuracy (float): The accuracy of the predictions.
+        all_preds (list): A list of all predictions.
+        all_labels (list): A list of all ground truth labels.
     """
     model.eval()
     losses = []
@@ -54,7 +107,7 @@ def evaluate_model(model, loader, device, criterion):
 
             losses.append(loss.item())
 
-            # Get predictions and extend lists for metrics calculation
+            # Get predictions and store them for later use
             preds = outputs.argmax(dim=2).detach().cpu().numpy()
             all_preds.extend(preds)
             all_labels.extend(labels.detach().cpu().numpy())
@@ -63,15 +116,46 @@ def evaluate_model(model, loader, device, criterion):
     avg_loss = sum(losses) / len(losses)
 
     # Flatten lists for metrics calculations
-    all_labels = [label for sublist in all_labels for label in sublist]
-    all_preds = [pred for sublist in all_preds for pred in sublist]
+    all_labels_flat = [label for sublist in all_labels for label in sublist]
+    all_preds_flat = [pred for sublist in all_preds for pred in sublist]
 
     # Calculate precision, recall, and accuracy
-    precision = precision_score(all_labels, all_preds, average='macro')
-    recall = recall_score(all_labels, all_preds, average='macro')
-    accuracy = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels_flat, all_preds_flat, average='macro')
+    recall = recall_score(all_labels_flat, all_preds_flat, average='macro')
+    accuracy = accuracy_score(all_labels_flat, all_preds_flat)
 
-    return avg_loss, precision, recall, accuracy
+    return avg_loss, precision, recall, accuracy, all_preds, all_labels
+
+
+def visualize_predictions_and_labels(pickle_file="test_results.pkl"):
+    """
+    Visualizes the predictions and labels as 3D points using pyvista.
+
+    Args:
+        pickle_file (str): Path to the pickle file containing predictions and labels.
+    """
+    # Load predictions and labels from pickle file
+    with open(pickle_file, "rb") as f:
+        data = pickle.load(f)
+        test_preds = data["predictions"]
+        test_labels = data["labels"]
+
+    predicted_points = np.array(test_preds)  # Shape should be (N, 3) for 3D points
+    true_points = np.array(test_labels)  # Shape should be (N, 3) for 3D points
+
+    # Create a plotter
+    plotter = pv.Plotter()
+
+    # Add predicted points
+    predicted_cloud = pv.PolyData(predicted_points)
+    plotter.add_mesh(predicted_cloud, color='blue', point_size=3, render_points_as_spheres=True)
+
+    # Add true points (ground truth)
+    true_cloud = pv.PolyData(true_points)
+    plotter.add_mesh(true_cloud, color='red', point_size=5, render_points_as_spheres=True)
+
+    # Show the interactive plot
+    plotter.show()
 
 
 def main(args):
@@ -115,9 +199,17 @@ def main(args):
             f'Validation Loss: {val_loss:.4f}, Precision: {val_prec:.4f}, Recall: {val_recall:.4f}, Accuracy: {val_acc:.4f}')
 
     # Testing evaluation
-    test_loss, test_prec, test_recall, test_acc = evaluate_model(model, test_loader, device, criterion)
+    test_loss, test_prec, test_recall, test_acc, test_preds, test_labels = evaluate_model(model, test_loader, device,
+                                                                                          criterion)
     print(
         f'Test Loss: {test_loss:.4f}, Precision: {test_prec:.4f}, Recall: {test_recall:.4f}, Accuracy: {test_acc:.4f}')
+
+    # Save test_preds and test_labels as lists in a pickle file
+    with open("test_results.pkl", "wb") as f:
+        pickle.dump({"predictions": test_preds, "labels": test_labels}, f)
+
+    print("Test predictions and labels saved as lists in 'test_results.pkl'")
+    visualize_predictions_and_labels("test_results.pkl")
 
 
 if __name__ == '__main__':
