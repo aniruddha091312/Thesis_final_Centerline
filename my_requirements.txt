@@ -11,3 +11,4 @@ requests==2.31.0
 h5py==3.11.0
 protobuf==4.25.3
 typing_extensions==4.12.2
+pyvista==0.44.1

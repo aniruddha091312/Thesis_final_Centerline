@@ -5,7 +5,6 @@ from datetime import time
 import numpy as np
 import torch
 import trimesh
-from matplotlib import pyplot as plt
 from scipy.spatial import cKDTree, distance_matrix
 from sklearn.cluster import DBSCAN
 from sklearn.model_selection import train_test_split
