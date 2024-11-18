@@ -122,10 +122,10 @@ def main(args):
             print(loss)
             loss.backward()
             optimizer.step()
-            if j == 2:
-                break
-        if i == 2:
-            break
+        #     if j == 2:
+        #         break
+        # if i == 2:
+        #     break
 
         train_loss, train_prec, train_recall, train_acc = evaluate_model(model, train_loader, device, criterion)
         val_loss, val_prec, val_recall, val_acc = evaluate_model(model, val_loader, device, criterion)
