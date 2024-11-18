@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import pyvista as pv
 import torch
 from sklearn.metrics import precision_score, recall_score, accuracy_score
 from torch.utils.data import DataLoader
@@ -11,11 +12,12 @@ from data_utils.KPconv_dataset import Pointnet2dataset, CustomBatch
 
 
 def parse_args():
-    parser = argparse.ArgumentParser('KPCONV Training and Evaluation')
+    parser = argparse.ArgumentParser('PointNet++ Training and Evaluation')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
-    parser.add_argument('--batch_size', type=int, default=8, help='batch size in training')
-    parser.add_argument('--epoch', type=int, default=10, help='number of epochs in training')
+    parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
+    parser.add_argument('--model', default='pointnet2_cls_ssg', help='model name [default: pointnet2_cls_ssg]')
+    parser.add_argument('--epoch', type=int, default=100, help='number of epochs in training')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate in training')
     parser.add_argument('--num_points', type=int, default=1024, help='number of points in point cloud')
     parser.add_argument('--optimizer', default='Adam', help='optimizer for training')
@@ -24,85 +26,70 @@ def parse_args():
     parser.add_argument('--use_normals', action='store_true', default=False, help='use normals')
     return parser.parse_args()
 
-#
-# def evaluate_model(model, loader, device, criterion):
-#     """
-#     Evaluate the model using the provided data loader.
-#
-#     Args:
-#         model (nn.Module): The model to evaluate.
-#         loader (DataLoader): The DataLoader providing data and labels.
-#         device (torch.device): The device to which tensors should be moved.
-#         criterion (nn.Module): The loss function (e.g., nn.NLLLoss()).
-#
-#     Returns:
-#         avg_loss (float): The average loss across the dataset.
-#         precision (float): The precision of the predictions.
-#         recall (float): The recall of the predictions.
-#         accuracy (float): The accuracy of the predictions.
-#     """
-#     model.eval()
-#     losses = []
-#     all_labels = []
-#     all_preds = []
-#
-#     with torch.no_grad():
-#         for data, labels in loader:
-#             data, labels = data.to(device), labels.to(device)
-#             outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
-#             loss = criterion(outputs, labels)
-#
-#             losses.append(loss.item())
-#
-#             # Get predictions and extend lists for metrics calculation
-#             preds = outputs.argmax(dim=2).detach().cpu().numpy()
-#             all_preds.extend(preds)
-#             all_labels.extend(labels.detach().cpu().numpy())
-#
-#     # Calculate average loss
-#     avg_loss = sum(losses) / len(losses)
-#
-#     # Flatten lists for metrics calculations
-#     all_labels = [label for sublist in all_labels for label in sublist]
-#     all_preds = [pred for sublist in all_preds for pred in sublist]
-#
-#     # Calculate precision, recall, and accuracy
-#     precision = precision_score(all_labels, all_preds, average='macro')
-#     recall = recall_score(all_labels, all_preds, average='macro')
-#     accuracy = accuracy_score(all_labels, all_preds)
-#
-#     return avg_loss, precision, recall, accuracy
-
 
 def evaluate_model(model, loader, device, criterion):
     model.eval()
     losses = []
     all_labels = []
     all_preds = []
-
+    point_clouds = []  # To store point clouds for visualization
     with torch.no_grad():
-        for batch in loader:
-            batch = CustomBatch(batch).to(device)  # Wrap the batch in CustomBatch and move to device
-
-            outputs = model(batch)  # Pass the CustomBatch instance to the model
-
-            # Reshape outputs and labels for evaluation
-            outputs = outputs.view(-1, outputs.size(-1))  # Flatten outputs to [batch_size * num_points, num_classes]
-            labels = batch.labels.view(-1)  # Flatten labels to [batch_size * num_points]
-
+        for data, labels in loader:
+            data, labels = data.to(device), labels.to(device)
+            outputs, _ = model(data)  # assuming model returns (outputs, _) where _ is unused
             loss = criterion(outputs, labels)
             losses.append(loss.item())
-
-            preds = outputs.argmax(dim=1).detach().cpu().numpy()
+            preds = outputs.argmax(dim=2).detach().cpu().numpy()
             all_preds.extend(preds)
             all_labels.extend(labels.detach().cpu().numpy())
-
+            point_clouds.extend(data.cpu().numpy())  # Store point clouds for visualization
+    # Calculate average loss
     avg_loss = sum(losses) / len(losses)
-    precision = precision_score(all_labels, all_preds, average='micro')
-    recall = recall_score(all_labels, all_preds, average='micro')
+    # Flatten lists for metrics calculations
+    all_labels = [label for sublist in all_labels for label in sublist]
+    all_preds = [pred for sublist in all_preds for pred in sublist]
+    # Calculate precision, recall, and accuracy
+    precision = precision_score(all_labels, all_preds, average='macro')
+    recall = recall_score(all_labels, all_preds, average='macro')
     accuracy = accuracy_score(all_labels, all_preds)
-
     return avg_loss, precision, recall, accuracy
+
+
+def visualize_point_cloud_with_labels(point_cloud, true_labels, pred_labels):
+    point_cloud = point_cloud.T  # Transpose to (X, 3)
+    plotter = pv.Plotter()
+
+    # Convert to pyvista-compatible data
+    lidar_points = pv.PolyData(point_cloud)
+    lidar_points['true_labels'] = true_labels
+    lidar_points['pred_labels'] = pred_labels
+
+    # True labels visualization
+    plotter.add_mesh(lidar_points, scalars='true_labels', cmap='viridis', point_size=5, render_points_as_spheres=True)
+    plotter.add_text("True Labels", font_size=10, position='upper_left')
+    plotter.show()
+
+    # Predicted labels visualization
+    plotter.add_mesh(lidar_points, scalars='pred_labels', cmap='plasma', point_size=5, render_points_as_spheres=True)
+    plotter.add_text("Predicted Labels", font_size=10, position='upper_left')
+    plotter.show()
+
+
+def visualize_predictions(test_loader, model, device):
+    model.eval()
+    with torch.no_grad():
+        for data, labels in test_loader:
+            data, labels = data.to(device), labels.to(device)
+            outputs, _ = model(data)
+            preds = outputs.argmax(dim=2).cpu().numpy()
+            data = data.cpu().numpy()
+            labels = labels.cpu().numpy()
+
+            # Visualize a batch
+            for i in range(len(data)):
+                visualize_point_cloud_with_labels(data[i], labels[i], preds[i])
+                break  # Visualize only the first sample in the batch
+            break  # Visualize only one batch
 
 
 def main(args):
@@ -158,6 +145,9 @@ def main(args):
     test_loss, test_prec, test_recall, test_acc = evaluate_model(model, test_loader, device, criterion)
     print(
         f'Test Loss: {test_loss:.4f}, Precision: {test_prec:.4f}, Recall: {test_recall:.4f}, Accuracy: {test_acc:.4f}')
+
+    # Visualize the model on the test dataset
+    visualize_predictions(test_loader, model, device)
 
 
 if __name__ == '__main__':
